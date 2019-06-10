@@ -3,6 +3,8 @@
 package kinesis
 
 import (
+	"fmt"
+	"github.com/golang/protobuf/proto"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/client/metadata"
@@ -27,13 +29,15 @@ var initClient func(*client.Client)
 // Used for custom request initialization logic
 var initRequest func(*request.Request)
 
+// Magic File Header for a KPL Aggregated Record
+var KplMagicHeader = fmt.Sprintf("%q", []byte("\xf3\x89\x9a\xc2"))
+
 // Service information constants
 const (
 	ServiceName = "kinesis"   // Name of service.
 	EndpointsID = ServiceName // ID to lookup a service endpoint with.
 	ServiceID   = "Kinesis"   // ServiceID is a unique identifer of a specific service.
-	KplMagicHeader = fmt.Sprintf("%q", []byte("\xf3\x89\x9a\xc2")) // Magic File Header for a KPL Aggregated Record
-	md5Buffer := 15
+	Md5Buffer = 15
 )
 
 // New creates a new instance of the Kinesis client with a session.
@@ -100,26 +104,47 @@ func (c *Kinesis) newRequest(op *request.Operation, params, data interface{}) *r
 	return req
 }
 
-func getProtoRecords(record *kinesis.Record) ([]*kinesis.Record, error) {
-	records := make([]*kinesis.Record, 0)
-	msg := record.Data[4:len(record.Data)-1-md5Buffer]
-	aggRecord := &rec.AggregatedRecord{}
+// getProtoRecords takes an array of Kinesis records and expands any Protobuf
+// records within that array, returning an array of all records
+func getProtoRecords(records []*Record) ([]*Record, error) {
+  allRecords := make([]*Record, 0)
+	for _, record := range records {
+		header := fmt.Sprintf("%q", record.Data[:4])
+		if header == KplMagicHeader {
+			protoRecords, err := expandProtoRecord(record)
+			if err != nil {
+				return nil, err
+			}
+			allRecords = append(allRecords, protoRecords...)
+		} else {
+			allRecords = append(allRecords, record)
+		}
+	}
+	return allRecords, nil
+}
+
+// expandProtoRecord expands a Protobuf record into an array of the records
+// contained by the given Protobuf record
+func expandProtoRecord(record *Record) ([]*Record, error) {
+	expandedRecords := make([]*Record, 0)
+	msg := record.Data[4:len(record.Data)-1-Md5Buffer]
+	aggRecord := &AggregatedRecord{}
 	err := proto.Unmarshal(msg, aggRecord)
 
 	if err != nil {
-		return records, err
+		return expandedRecords, err
 	}
 
 	for _, aggrec := range aggRecord.Records {
-		r := &kinesis.Record{
+		r := &Record{
 			ApproximateArrivalTimestamp: record.ApproximateArrivalTimestamp,
 			Data: aggrec.Data,
 			EncryptionType: record.EncryptionType,
 			PartitionKey: record.PartitionKey,
 			SequenceNumber: record.SequenceNumber,
 		}
-		records = append(records, r)
+		expandedRecords = append(expandedRecords, r)
 	}
 
-	return records, nil
+	return expandedRecords, nil
 }
