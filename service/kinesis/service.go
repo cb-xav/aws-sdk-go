@@ -32,6 +32,8 @@ const (
 	ServiceName = "kinesis"   // Name of service.
 	EndpointsID = ServiceName // ID to lookup a service endpoint with.
 	ServiceID   = "Kinesis"   // ServiceID is a unique identifer of a specific service.
+	KplMagicHeader = fmt.Sprintf("%q", []byte("\xf3\x89\x9a\xc2")) // Magic File Header for a KPL Aggregated Record
+	md5Buffer := 15
 )
 
 // New creates a new instance of the Kinesis client with a session.
@@ -96,4 +98,28 @@ func (c *Kinesis) newRequest(op *request.Operation, params, data interface{}) *r
 	}
 
 	return req
+}
+
+func getProtoRecords(record *kinesis.Record) ([]*kinesis.Record, error) {
+	records := make([]*kinesis.Record, 0)
+	msg := record.Data[4:len(record.Data)-1-md5Buffer]
+	aggRecord := &rec.AggregatedRecord{}
+	err := proto.Unmarshal(msg, aggRecord)
+
+	if err != nil {
+		return records, err
+	}
+
+	for _, aggrec := range aggRecord.Records {
+		r := &kinesis.Record{
+			ApproximateArrivalTimestamp: record.ApproximateArrivalTimestamp,
+			Data: aggrec.Data,
+			EncryptionType: record.EncryptionType,
+			PartitionKey: record.PartitionKey,
+			SequenceNumber: record.SequenceNumber,
+		}
+		records = append(records, r)
+	}
+
+	return records, nil
 }
