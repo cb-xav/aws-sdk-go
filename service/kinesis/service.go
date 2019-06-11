@@ -3,6 +3,7 @@
 package kinesis
 
 import (
+	"crypto/md5"
 	"fmt"
 	"github.com/golang/protobuf/proto"
 	"github.com/aws/aws-sdk-go/aws"
@@ -11,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/aws/signer/v4"
 	"github.com/aws/aws-sdk-go/private/protocol/jsonrpc"
+	rec "github.com/aws/aws-sdk-go/service/kinesis/records"
 )
 
 // Kinesis provides the API operation methods for making requests to
@@ -37,7 +39,7 @@ const (
 	ServiceName = "kinesis"   // Name of service.
 	EndpointsID = ServiceName // ID to lookup a service endpoint with.
 	ServiceID   = "Kinesis"   // ServiceID is a unique identifer of a specific service.
-	Md5Buffer = 15
+	DigestSize  = 16          // MD5 Message size for protobuf.
 )
 
 // New creates a new instance of the Kinesis client with a session.
@@ -106,45 +108,73 @@ func (c *Kinesis) newRequest(op *request.Operation, params, data interface{}) *r
 
 // getProtoRecords takes an array of Kinesis records and expands any Protobuf
 // records within that array, returning an array of all records
-func getProtoRecords(records []*Record) ([]*Record, error) {
-  allRecords := make([]*Record, 0)
+func (c *Kinesis) deaggregateRecords(records []*Record) ([]*Record, error) {
+	var isAggregated bool
+ 	allRecords := make([]*Record, 0)
 	for _, record := range records {
-		header := fmt.Sprintf("%q", record.Data[:4])
-		if header == KplMagicHeader {
-			protoRecords, err := expandProtoRecord(record)
-			if err != nil {
-				return nil, err
-			}
-			allRecords = append(allRecords, protoRecords...)
+		isAggregated = true
+
+		var dataMagic string
+		// Check if record is long enough to have magic file header
+		if len(record.Data) >= len(KplMagicHeader) {
+			dataMagic = fmt.Sprintf("%q", record.Data[:len(KplMagicHeader)])
 		} else {
+			isAggregated = false
+		}
+
+		decodedDataNoMagic := record.Data[len(KplMagicHeader):]
+
+		// Check if record has KPL Aggregate Record Magic Header and data length
+		// is correct size
+		if KplMagicHeader != dataMagic || len(decodedDataNoMagic) <= DigestSize {
+			isAggregated = false
+		}
+
+		if isAggregated {
+			messageDigest := fmt.Sprintf("%x", decodedDataNoMagic[len(decodedDataNoMagic)-DigestSize:])
+			messageData := decodedDataNoMagic[:len(decodedDataNoMagic)-DigestSize]
+
+			calculatedDigest := fmt.Sprintf("%x", md5.Sum(messageData))
+
+			// Check protobuf MD5 hash matches MD5 sum of record
+			if messageDigest != calculatedDigest {
+				isAggregated = false
+			} else {
+				aggRecord := &rec.AggregatedRecord{}
+				err := proto.Unmarshal(messageData, aggRecord)
+
+				if err != nil {
+					return allRecords, err
+				}
+
+				partitionKeys := aggRecord.PartitionKeyTable
+
+				for _, aggrec := range aggRecord.Records {
+					newRecord := createUserRecord(partitionKeys, aggrec, record)
+					allRecords = append(allRecords, newRecord)
+				}
+			}
+		} 
+
+		if !isAggregated {
 			allRecords = append(allRecords, record)
 		}
 	}
+
 	return allRecords, nil
 }
 
-// expandProtoRecord expands a Protobuf record into an array of the records
-// contained by the given Protobuf record
-func expandProtoRecord(record *Record) ([]*Record, error) {
-	expandedRecords := make([]*Record, 0)
-	msg := record.Data[4:len(record.Data)-1-Md5Buffer]
-	aggRecord := &AggregatedRecord{}
-	err := proto.Unmarshal(msg, aggRecord)
+// createUserRecord takes in the partitionKeys of the aggregated record, the individual
+// deaggregated record, and the original aggregated record builds a kinesis.Record and
+// returns it
+func createUserRecord(partitionKeys []string, aggRec *rec.Record, record *Record) (*Record) {
+	partitionKey := partitionKeys[*aggRec.PartitionKeyIndex]
 
-	if err != nil {
-		return expandedRecords, err
+	return &Record{
+		ApproximateArrivalTimestamp: record.ApproximateArrivalTimestamp,
+		Data: aggRec.Data,
+		EncryptionType: record.EncryptionType,
+		PartitionKey: &partitionKey,
+		SequenceNumber: record.SequenceNumber,
 	}
-
-	for _, aggrec := range aggRecord.Records {
-		r := &Record{
-			ApproximateArrivalTimestamp: record.ApproximateArrivalTimestamp,
-			Data: aggrec.Data,
-			EncryptionType: record.EncryptionType,
-			PartitionKey: record.PartitionKey,
-			SequenceNumber: record.SequenceNumber,
-		}
-		expandedRecords = append(expandedRecords, r)
-	}
-
-	return expandedRecords, nil
 }
