@@ -1206,7 +1206,6 @@ func (c *Kinesis) GetRecordsRequest(input *GetRecordsInput) (req *request.Reques
 
 	output = &GetRecordsOutput{}
 	req = c.newRequest(op, input, output)
-	output.Records, _ = c.deaggregateRecords(output.Records)
 	return
 }
 
@@ -1325,7 +1324,12 @@ func (c *Kinesis) GetRecordsRequest(input *GetRecordsInput) (req *request.Reques
 // See also, https://docs.aws.amazon.com/goto/WebAPI/kinesis-2013-12-02/GetRecords
 func (c *Kinesis) GetRecords(input *GetRecordsInput) (*GetRecordsOutput, error) {
 	req, out := c.GetRecordsRequest(input)
-	return out, req.Send()
+	err := req.Send()
+	if err != nil {
+		return nil, err
+	}
+	out.Records, err = c.deaggregateRecords(out.Records)
+	return out, err
 }
 
 // GetRecordsWithContext is the same as GetRecords with the addition of
@@ -1341,7 +1345,12 @@ func (c *Kinesis) GetRecordsWithContext(ctx aws.Context, input *GetRecordsInput,
 	req, out := c.GetRecordsRequest(input)
 	req.SetContext(ctx)
 	req.ApplyOptions(opts...)
-	return out, req.Send()
+	err := req.Send()
+        if err != nil {
+                return nil, err
+        }
+        out.Records, err = c.deaggregateRecords(out.Records)
+	return out, err
 }
 
 const opGetShardIterator = "GetShardIterator"
