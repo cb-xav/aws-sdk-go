@@ -12,7 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/aws/signer/v4"
 	"github.com/aws/aws-sdk-go/private/protocol/jsonrpc"
-	rec "github.com/aws/aws-sdk-go/service/kinesis/records"
+	rec "github.com/cb-xav/aws-sdk-go/service/kinesis/records"
 )
 
 // Kinesis provides the API operation methods for making requests to
@@ -39,6 +39,7 @@ const (
 	ServiceName = "kinesis"   // Name of service.
 	EndpointsID = ServiceName // ID to lookup a service endpoint with.
 	ServiceID   = "Kinesis"   // ServiceID is a unique identifer of a specific service.
+	KplMagicLen = 4           // Length of magic header for KPL Aggregate Record checking.
 	DigestSize  = 16          // MD5 Message size for protobuf.
 )
 
@@ -110,19 +111,19 @@ func (c *Kinesis) newRequest(op *request.Operation, params, data interface{}) *r
 // records within that array, returning an array of all records
 func (c *Kinesis) deaggregateRecords(records []*Record) ([]*Record, error) {
 	var isAggregated bool
- 	allRecords := make([]*Record, 0)
+	allRecords := make([]*Record, 0)
 	for _, record := range records {
 		isAggregated = true
 
 		var dataMagic string
 		// Check if record is long enough to have magic file header
-		if len(record.Data) >= len(KplMagicHeader) {
-			dataMagic = fmt.Sprintf("%q", record.Data[:len(KplMagicHeader)])
+		if len(record.Data) >= KplMagicLen {
+			dataMagic = fmt.Sprintf("%q", record.Data[:KplMagicLen])
 		} else {
 			isAggregated = false
 		}
 
-		decodedDataNoMagic := record.Data[len(KplMagicHeader):]
+		decodedDataNoMagic := record.Data[KplMagicLen:]
 
 		// Check if record has KPL Aggregate Record Magic Header and data length
 		// is correct size
@@ -142,6 +143,7 @@ func (c *Kinesis) deaggregateRecords(records []*Record) ([]*Record, error) {
 			} else {
 				aggRecord := &rec.AggregatedRecord{}
 				err := proto.Unmarshal(messageData, aggRecord)
+				fmt.Println(aggRecord)
 
 				if err != nil {
 					return allRecords, err
@@ -154,7 +156,7 @@ func (c *Kinesis) deaggregateRecords(records []*Record) ([]*Record, error) {
 					allRecords = append(allRecords, newRecord)
 				}
 			}
-		} 
+		}
 
 		if !isAggregated {
 			allRecords = append(allRecords, record)
