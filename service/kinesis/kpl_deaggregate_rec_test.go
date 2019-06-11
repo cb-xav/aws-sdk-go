@@ -121,8 +121,8 @@ func TestNonMatchingMagicHeaderReturnsSingleRecord(t *testing.T) {
 		panic(err)
 	}
 	min := 1
-    max := 10
-    n := rand.Intn(max - min) + min
+	max := 10
+	n := rand.Intn(max - min) + min
 	aggData := generateAggregateRecord(n)
 	mismatchAggData := aggData[1:]
 	kr = generateKinesisRecord(mismatchAggData)
@@ -154,8 +154,8 @@ func TestVariableLengthRecordsReturnsCorrectNumberOfDeaggregatedRecords(t *testi
 		panic(err)
 	}
 	min := 1
-    max := 10
-    n := rand.Intn(max - min) + min
+	max := 10
+	n := rand.Intn(max - min) + min
 	aggData := generateAggregateRecord(n)
 	kr = generateKinesisRecord(aggData)
 	krs = append(krs, kr)
@@ -187,7 +187,7 @@ func TestRecordAfterMagicHeaderWithLengthLessThanDigestSizeReturnsSingleRecord(t
 	}
 	min := 1
     max := 10
-    n := rand.Intn(max - min) + min
+	n := rand.Intn(max - min) + min
 	aggData := generateAggregateRecord(n)
 	// Change size of proto message to 15
 	reducedAggData := aggData[:19]
@@ -221,8 +221,8 @@ func TestRecordWithMismatchMd5SumReturnsSingleRecord(t *testing.T) {
 		panic(err)
 	}
 	min := 1
-    max := 10
-    n := rand.Intn(max - min) + min
+	max := 10
+	n := rand.Intn(max - min) + min
 	aggData := generateAggregateRecord(n)
 	// Remove last byte from array to mismatch the MD5 sums
 	mismatchAggData := aggData[:len(aggData)-1]
