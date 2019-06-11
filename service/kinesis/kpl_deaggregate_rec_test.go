@@ -186,7 +186,7 @@ func TestRecordAfterMagicHeaderWithLengthLessThanDigestSizeReturnsSingleRecord(t
 		panic(err)
 	}
 	min := 1
-    max := 10
+	max := 10
 	n := rand.Intn(max - min) + min
 	aggData := generateAggregateRecord(n)
 	// Change size of proto message to 15
