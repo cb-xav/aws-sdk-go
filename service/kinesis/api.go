@@ -1346,10 +1346,10 @@ func (c *Kinesis) GetRecordsWithContext(ctx aws.Context, input *GetRecordsInput,
 	req.SetContext(ctx)
 	req.ApplyOptions(opts...)
 	err := req.Send()
-    if err != nil {
-            return nil, err
-    }
-    out.Records, err = c.DeaggregateRecords(out.Records)
+	if err != nil {
+		return nil, err
+	}
+	out.Records, err = c.DeaggregateRecords(out.Records)
 	return out, err
 }
 
