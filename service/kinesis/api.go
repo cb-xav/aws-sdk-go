@@ -1206,6 +1206,7 @@ func (c *Kinesis) GetRecordsRequest(input *GetRecordsInput) (req *request.Reques
 
 	output = &GetRecordsOutput{}
 	req = c.newRequest(op, input, output)
+	output.Records, _ = c.deaggregateRecords(output.Records)
 	return
 }
 
