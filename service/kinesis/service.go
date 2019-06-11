@@ -107,7 +107,7 @@ func (c *Kinesis) newRequest(op *request.Operation, params, data interface{}) *r
 	return req
 }
 
-// getProtoRecords takes an array of Kinesis records and expands any Protobuf
+// DeaggregateRecords takes an array of Kinesis records and expands any Protobuf
 // records within that array, returning an array of all records
 func (c *Kinesis) DeaggregateRecords(records []*Record) ([]*Record, error) {
 	var isAggregated bool
