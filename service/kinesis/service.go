@@ -109,21 +109,21 @@ func (c *Kinesis) newRequest(op *request.Operation, params, data interface{}) *r
 
 // getProtoRecords takes an array of Kinesis records and expands any Protobuf
 // records within that array, returning an array of all records
-func (c *Kinesis) deaggregateRecords(records []*Record) ([]*Record, error) {
+func (c *Kinesis) DeaggregateRecords(records []*Record) ([]*Record, error) {
 	var isAggregated bool
 	allRecords := make([]*Record, 0)
 	for _, record := range records {
 		isAggregated = true
 
 		var dataMagic string
+		var decodedDataNoMagic []byte
 		// Check if record is long enough to have magic file header
 		if len(record.Data) >= KplMagicLen {
 			dataMagic = fmt.Sprintf("%q", record.Data[:KplMagicLen])
+			decodedDataNoMagic = record.Data[KplMagicLen:]
 		} else {
 			isAggregated = false
 		}
-
-		decodedDataNoMagic := record.Data[KplMagicLen:]
 
 		// Check if record has KPL Aggregate Record Magic Header and data length
 		// is correct size
@@ -143,7 +143,6 @@ func (c *Kinesis) deaggregateRecords(records []*Record) ([]*Record, error) {
 			} else {
 				aggRecord := &rec.AggregatedRecord{}
 				err := proto.Unmarshal(messageData, aggRecord)
-				fmt.Println(aggRecord)
 
 				if err != nil {
 					return allRecords, err
