@@ -1328,7 +1328,7 @@ func (c *Kinesis) GetRecords(input *GetRecordsInput) (*GetRecordsOutput, error) 
 	if err != nil {
 		return nil, err
 	}
-	out.Records, err = c.deaggregateRecords(out.Records)
+	out.Records, err = c.DeaggregateRecords(out.Records)
 	return out, err
 }
 
@@ -1349,7 +1349,7 @@ func (c *Kinesis) GetRecordsWithContext(ctx aws.Context, input *GetRecordsInput,
         if err != nil {
                 return nil, err
         }
-        out.Records, err = c.deaggregateRecords(out.Records)
+        out.Records, err = c.DeaggregateRecords(out.Records)
 	return out, err
 }
 
